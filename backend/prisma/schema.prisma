@@ -1,0 +1,76 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String     @id @default(uuid())
+  username     String     @unique
+  passwordHash String
+  fullName     String
+  role         String     @default("guard")
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  entries      Entry[]
+  exits        Exit[]
+  incidents    Incident[]
+}
+
+model Entry {
+  id             String     @id @default(uuid())
+  licensePlate   String
+  vehiclePhoto   String
+  driverPhoto    String
+  entryTimestamp  DateTime   @default(now())
+  guard          User       @relation(fields: [guardId], references: [id])
+  guardId        String
+  latitude       Float?
+  longitude      Float?
+  deviceInfo     String?
+  notes          String?
+  createdAt      DateTime   @default(now())
+  exits          Exit[]
+  incidents      Incident[]
+
+  @@index([licensePlate])
+  @@index([entryTimestamp])
+}
+
+model Exit {
+  id              String   @id @default(uuid())
+  entry           Entry    @relation(fields: [entryId], references: [id])
+  entryId         String   @unique
+  exitTimestamp   DateTime  @default(now())
+  guard           User     @relation(fields: [guardId], references: [id])
+  guardId         String
+  driverPhotoExit String?
+  isDriverMatch   Boolean?
+  latitude        Float?
+  longitude       Float?
+  deviceInfo      String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@index([entryId])
+}
+
+model Incident {
+  id              String    @id @default(uuid())
+  entry           Entry     @relation(fields: [entryId], references: [id])
+  entryId         String
+  incidentType    String
+  description     String?
+  reportedBy      User      @relation(fields: [reportedById], references: [id])
+  reportedById    String
+  status          String    @default("open")
+  resolutionNotes String?
+  createdAt       DateTime  @default(now())
+  resolvedAt      DateTime?
+
+  @@index([status])
+}

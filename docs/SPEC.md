@@ -307,7 +307,7 @@ CREATE TABLE users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
-    role VARCHAR(20) DEFAULT 'guard', -- 'guard', 'supervisor', 'admin'
+    role VARCHAR(20) DEFAULT 'guard', -- 'guard', 'support', 'admin'
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -331,7 +331,7 @@ CREATE TABLE entries (
 -- Tabla de Registros de Salida
 CREATE TABLE exits (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    entry_id UUID REFERENCES entries(id),
+    entry_id UUID UNIQUE REFERENCES entries(id), -- Relación 1-a-1 estricta
     exit_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     guard_id UUID REFERENCES users(id),
     driver_photo_exit TEXT, -- Foto del conductor al salir (comparación)
@@ -347,7 +347,7 @@ CREATE TABLE exits (
 CREATE TABLE incidents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     entry_id UUID REFERENCES entries(id),
-    incident_type VARCHAR(50) NOT NULL, -- 'driver_mismatch', 'unregistered_exit', etc.
+    incident_type VARCHAR(50) NOT NULL, -- 'driver_mismatch', 'unregistered_exit', 'plate_not_visible', 'conductor_refused', 'other'
     description TEXT,
     reported_by UUID REFERENCES users(id),
     status VARCHAR(20) DEFAULT 'open', -- 'open', 'investigating', 'resolved'
@@ -359,7 +359,11 @@ CREATE TABLE incidents (
 -- Índices para optimización
 CREATE INDEX idx_entries_plate ON entries(license_plate);
 CREATE INDEX idx_entries_timestamp ON entries(entry_timestamp);
+CREATE INDEX idx_entries_guard ON entries(guard_id);
 CREATE INDEX idx_exits_entry ON exits(entry_id);
+CREATE INDEX idx_exits_guard ON exits(guard_id);
+CREATE INDEX idx_incidents_entry ON incidents(entry_id);
+CREATE INDEX idx_incidents_reported ON incidents(reported_by);
 CREATE INDEX idx_incidents_status ON incidents(status);
 ```
 
@@ -443,14 +447,22 @@ interface CreateExitResponse {
 }
 ```
 
-### 6.5 Consideraciones de Seguridad
+### 6.5 Consideraciones de Seguridad y Robustez
 
-1. **Transmisión de imágenes:** HTTPS obligatorio, compresión antes de enviar
-2. **Almacenamiento:** Fotos encriptadas en disco (AES-256)
-3. **Acceso:** JWT con expiración 8h, refresh token
-4. **Validación:** Sanitización de inputs, rate limiting
-5. **Logs:** Auditoría de todas las operaciones
-6. **Backup:** Incrementales diarios, retención 90 días
+1. **Control de Acceso Basado en Roles (RBAC) y Separación de Funciones (SoD)**:
+   - Tres roles técnicos estrictos: `guard` (vigilantes operativos de garita), `support` (soporte técnico y auditoría), y `admin` (control total).
+   - Bloqueo en frontend y backend: la API de Express valida la firma del token JWT y restringe los endpoints según el rol (`authorize(['rol1', 'rol2'])`).
+   - El frontend renderiza únicamente las pestañas permitidas y cuenta con un hook de guardia en `App.tsx` que redirige inmediatamente a vistas seguras autorizadas ante intentos de navegación manuales o en caliente.
+   - **Flujo de Privacidad Estricta de Incidentes**: Para evitar colusiones en garita, el vigilante (`guard`) puede reportar incidentes, pero una vez enviados, pierde visibilidad del listado o historial de incidentes.
+2. **Seguridad JWT en Producción**:
+   - Validación del arranque de backend: si corre en `production` y falta la variable `JWT_SECRET` o coincide con la clave de desarrollo por defecto, el proceso aborta inmediatamente (`process.exit(1)`) para evitar despliegues inseguros.
+   - Duración de tokens restringida a un máximo de 8 horas.
+3. **Robustez de Consultas y Paginación**:
+   - Sanitización en endpoints de consulta: los parámetros `page` y `limit` se parsean con límites obligatorios (`Math.max(1, ...)` y límites superiores DoS de `100` registros) para evitar excepciones `NaN` que puedan tumbar el backend.
+4. **Integridad de Reportes y Protección contra CSV Injection**:
+   - Sanitización de celdas en descargas: se implementa una función de escapado estricta (`escapeCSV`) sobre campos de texto (IDs, Placas, Vigilantes, Notas) que duplica comillas dobles y envuelve los valores entre comillas dobles para evitar corrupciones de celdas en Excel o inyecciones de fórmulas.
+5. **Transmisión de imágenes:** HTTPS obligatorio, compresión antes de enviar.
+6. **Almacenamiento:** Base64 nativo en PostgreSQL (con migración programada a almacenamiento de objetos a mediano plazo para escalabilidad de disco).
 
 ### 6.6 Offline-First Strategy (PWA)
 

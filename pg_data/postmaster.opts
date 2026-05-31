@@ -1,0 +1,1 @@
+/usr/lib/postgresql/18/bin/postgres "-D" "pg_data" "-p" "5433" "-k" "/home/satoshi/GitHub/SICISV/pg_data"
