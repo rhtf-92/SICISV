@@ -9,6 +9,7 @@ import exitRoutes from './routes/exitRoutes';
 import incidentRoutes from './routes/incidentRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import exportRoutes from './routes/exportRoutes';
+import facialRoutes from './routes/facialRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -30,6 +31,7 @@ app.use('/api/exits', exitRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/facial', facialRoutes);
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
