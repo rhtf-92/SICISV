@@ -33,6 +33,10 @@ pnpm-debug.log*
 # Database
 *.db
 *.db-journal
+pg_data
+/pg_data/
+server.log
+*.log
 
 # Lock files (keep only package-lock.json)
 pnpm-lock.yaml

@@ -13,7 +13,11 @@ import type { Entry, CameraState } from '../types';
 
 type ExitVerificationState = 'idle' | 'searching' | 'found' | 'driver_mismatch' | 'not_found' | 'confirming' | 'success';
 
-export function ExitPage() {
+interface ExitPageProps {
+  onComplete?: () => void;
+}
+
+export function ExitPage({ onComplete }: ExitPageProps) {
   const { setExitSearchResult } = useVehicleStore();
 
   const [searchPlate, setSearchPlate] = useState('');
@@ -113,6 +117,7 @@ export function ExitPage() {
       // Reset después de 3 segundos
       setTimeout(() => {
         resetForm();
+        if (onComplete) onComplete();
       }, 3000);
     } catch (err: any) {
       setError(err.message || 'Error registrando la salida');

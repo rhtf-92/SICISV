@@ -74,7 +74,7 @@ export const useVehicleStore = create<VehicleStore>()(
       // Estado inicial
       user: null,
       token: null,
-      currentStep: 'vehicle',
+      currentStep: 'driver',
       vehiclePhoto: null,
       driverPhoto: null,
       licensePlate: '',
@@ -91,7 +91,7 @@ export const useVehicleStore = create<VehicleStore>()(
       logout: () => set({
         user: null,
         token: null,
-        currentStep: 'vehicle',
+        currentStep: 'driver',
         vehiclePhoto: null,
         driverPhoto: null,
         licensePlate: '',
@@ -123,7 +123,7 @@ export const useVehicleStore = create<VehicleStore>()(
         stepStatus: { ...state.stepStatus, [step]: status }
       })),
       resetRegistration: () => set({
-        currentStep: 'vehicle',
+        currentStep: 'driver',
         vehiclePhoto: null,
         driverPhoto: null,
         licensePlate: '',
@@ -152,6 +152,11 @@ export const useVehicleStore = create<VehicleStore>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
+        currentStep: state.currentStep,
+        vehiclePhoto: state.vehiclePhoto,
+        driverPhoto: state.driverPhoto,
+        licensePlate: state.licensePlate,
+        stepStatus: state.stepStatus,
       }),
     }
   )

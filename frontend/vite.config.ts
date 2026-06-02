@@ -13,6 +13,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true, // Escuchar en todas las interfaces de red local (ej. dispositivos móviles)
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

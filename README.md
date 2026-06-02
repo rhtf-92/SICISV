@@ -100,9 +100,18 @@ Una vez exportado el PATH, opere la base de datos de manera limpia desde la raí
   ```bash
   initdb -D pg_data
   ```
-* **Iniciar el servidor PostgreSQL**:
+* **Iniciar el servidor PostgreSQL (Automático - Recomendado)**:
+  Ejecute el script automatizado que valida el estado de la conexión, localiza el ejecutable de PostgreSQL 18 y arranca el servidor local de manera segura:
   ```bash
-  pg_ctl -D pg_data -l pg_data/server.log -o "-p 5433 -k /home/satoshi/GitHub/SICISV/pg_data" start
+  npm run db:start
+  ```
+  O directamente ejecutando el script en terminal:
+  ```bash
+  ./start_db.sh
+  ```
+* **Iniciar el servidor PostgreSQL (Manual)**:
+  ```bash
+  /usr/lib/postgresql/18/bin/pg_ctl -D pg_data -l pg_data/server.log -o "-p 5433 -k /home/satoshi/GitHub/SICISV/pg_data" start
   ```
 * **Crear roles y base de datos de desarrollo** (Solo la primera vez):
   ```bash

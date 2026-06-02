@@ -1,4 +1,5 @@
 // Componente ProgressStepper - Indicador de Progreso del Registro
+// Diseñado con soporte de orientación vertical/horizontal por el Arquitecto Senior
 
 import { Check } from 'lucide-react';
 import type { RegistrationStep } from '../types';
@@ -10,8 +11,8 @@ interface Step {
 }
 
 const steps: Step[] = [
-  { id: 'vehicle', label: 'Foto del Vehículo', shortLabel: 'Vehículo' },
   { id: 'driver', label: 'Foto del Conductor', shortLabel: 'Conductor' },
+  { id: 'vehicle', label: 'Foto del Vehículo', shortLabel: 'Vehículo' },
   { id: 'plate', label: 'Registro de Placa', shortLabel: 'Placa' },
   { id: 'confirm', label: 'Confirmar Ingreso', shortLabel: 'Confirmar' },
 ];
@@ -23,9 +24,10 @@ interface ProgressStepperProps {
     driver: 'pending' | 'captured' | 'error';
     plate: 'pending' | 'captured' | 'error';
   };
+  orientation?: 'horizontal' | 'vertical';
 }
 
-export function ProgressStepper({ currentStep, stepStatus }: ProgressStepperProps) {
+export function ProgressStepper({ currentStep, stepStatus, orientation = 'horizontal' }: ProgressStepperProps) {
   const currentIndex = steps.findIndex(s => s.id === currentStep);
 
   const getStepStatus = (stepId: RegistrationStep): 'completed' | 'active' | 'pending' | 'error' => {
@@ -34,7 +36,6 @@ export function ProgressStepper({ currentStep, stepStatus }: ProgressStepperProp
     if (stepIndex < currentIndex) return 'completed';
 
     if (stepId === 'confirm') {
-      // Confirmar está activo solo cuando todo lo anterior está completado
       const allPreviousCompleted =
         stepStatus.vehicle === 'captured' &&
         stepStatus.driver === 'captured' &&
@@ -52,6 +53,82 @@ export function ProgressStepper({ currentStep, stepStatus }: ProgressStepperProp
     return status === 'captured' ? 'completed' : 'pending';
   };
 
+  // Renderizado Vertical (Diseño Compacto de Barra Lateral)
+  if (orientation === 'vertical') {
+    return (
+      <div className="flex flex-col gap-6 w-full py-2">
+        {steps.map((step, index) => {
+          const status = getStepStatus(step.id);
+          const isActive = step.id === currentStep;
+
+          return (
+            <div key={step.id} className="flex gap-4 items-start relative">
+              {/* Conector vertical decorativo */}
+              {index < steps.length - 1 && (
+                <div
+                  className={`
+                    absolute left-[22px] top-11 bottom-[-24px] w-0.5 z-0
+                    transition-colors duration-300
+                    ${status === 'completed' ? 'bg-green-500' : 'bg-slate-700'}
+                  `}
+                />
+              )}
+
+              {/* Círculo indicador */}
+              <div
+                className={`
+                  w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 z-10 font-bold text-sm
+                  transition-all duration-300 border-2
+                  ${status === 'completed' 
+                    ? 'bg-green-500/10 border-green-500 text-green-400' 
+                    : ''
+                  }
+                  ${status === 'active' 
+                    ? 'bg-blue-600/10 border-blue-500 text-blue-400 ring-4 ring-blue-500/15 scale-105' 
+                    : ''
+                  }
+                  ${status === 'pending' 
+                    ? 'bg-slate-800 border-slate-700 text-slate-500' 
+                    : ''
+                  }
+                  ${status === 'error' 
+                    ? 'bg-red-500/10 border-red-500 text-red-400' 
+                    : ''
+                  }
+                `}
+              >
+                {status === 'completed' ? (
+                  <Check className="w-5 h-5" />
+                ) : (
+                  <span>{index + 1}</span>
+                )}
+              </div>
+
+              {/* Textos descriptivos */}
+              <div className="flex flex-col pt-1.5 min-w-0">
+                <span
+                  className={`
+                    text-sm font-semibold tracking-wide truncate
+                    ${status === 'active' ? 'text-blue-400' : ''}
+                    ${status === 'completed' ? 'text-green-400 font-medium' : ''}
+                    ${status === 'pending' ? 'text-slate-400' : ''}
+                    ${status === 'error' ? 'text-red-400' : ''}
+                  `}
+                >
+                  {step.label}
+                </span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mt-0.5">
+                  {status === 'completed' ? 'Completado' : status === 'active' ? 'En progreso' : 'Pendiente'}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Renderizado Horizontal (Diseño Estándar de Cabecera)
   return (
     <div className="w-full py-4">
       {/* Versión Desktop */}

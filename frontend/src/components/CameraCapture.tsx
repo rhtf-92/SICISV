@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Camera, CameraOff, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import type { CameraState } from '../types';
+import { compressImage } from '../utils/imageCompressor';
 
 interface CameraCaptureProps {
   mode: 'vehicle' | 'driver';
@@ -15,6 +16,30 @@ export function CameraCapture({ mode, onCapture, state, onStateChange }: CameraC
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onStateChange({ status: 'capturing' });
+      try {
+        const compressedBase64 = await compressImage(file, 1280, 1280, 0.8);
+        onStateChange({ status: 'success' });
+        onCapture(compressedBase64);
+      } catch (err) {
+        console.error('Error compressing mobile camera image:', err);
+        onStateChange({
+          status: 'error',
+          error: 'Error al procesar la fotografía de la cámara.'
+        });
+      }
+    }
+  }, [onCapture, onStateChange]);
+
+  const triggerFileInput = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
   const [hasCamera, setHasCamera] = useState(true);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
@@ -211,16 +236,25 @@ export function CameraCapture({ mode, onCapture, state, onStateChange }: CameraC
 
         {/* Estado de error */}
         {state.status === 'error' && (
-          <div className="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center gap-3">
-            <CameraOff className="w-16 h-16 text-red-400" />
-            <p className="text-red-300 text-center px-4">{state.error}</p>
-            <button
-              onClick={startCamera}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Reintentar
-            </button>
+          <div className="absolute inset-0 bg-slate-900/85 flex flex-col items-center justify-center gap-3 p-4">
+            <CameraOff className="w-12 h-12 text-red-400" />
+            <p className="text-red-300 text-center text-sm px-2 leading-relaxed">{state.error}</p>
+            <div className="flex flex-col sm:flex-row gap-2.5 mt-2 w-full max-w-xs">
+              <button
+                onClick={startCamera}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-850 hover:bg-slate-800 text-slate-300 rounded-xl transition-colors text-sm font-semibold border border-slate-700/60"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Reintentar
+              </button>
+              <button
+                onClick={triggerFileInput}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-650 hover:bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all text-sm"
+              >
+                <Camera className="w-4 h-4" />
+                Cámara Móvil
+              </button>
+            </div>
           </div>
         )}
 
@@ -243,17 +277,27 @@ export function CameraCapture({ mode, onCapture, state, onStateChange }: CameraC
       {/* Canvas oculto para captura */}
       <canvas ref={canvasRef} className="hidden" />
 
+      {/* Input oculto para fallback de cámara nativa en móvil (Secure Contexts bypass) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture={mode === 'driver' ? 'user' : 'environment'}
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       {/* Controles */}
-      <div className="mt-4 flex justify-center gap-4">
+      <div className="mt-4 flex justify-center gap-3 sm:gap-4 px-2">
         {state.status === 'success' ? (
           <button
             onClick={() => {
               setCapturedPhoto(null);
               retakePhoto();
             }}
-            className="flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 sm:px-6 sm:py-3 bg-slate-700 hover:bg-slate-600 rounded-xl transition-colors text-sm sm:text-base"
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshCw className="w-4 h-4 sm:w-5 sm:w-5" />
             Tomar otra foto
           </button>
         ) : (
@@ -261,7 +305,7 @@ export function CameraCapture({ mode, onCapture, state, onStateChange }: CameraC
             onClick={handleCapture}
             disabled={state.status !== 'active'}
             className={`
-              flex items-center gap-3 px-8 py-4 rounded-xl font-semibold text-lg
+              flex items-center gap-2.5 sm:gap-3 px-5 py-3 sm:px-8 sm:py-4 rounded-xl font-semibold text-base sm:text-lg
               transition-all transform active:scale-95
               ${state.status === 'active'
                 ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'
@@ -269,7 +313,7 @@ export function CameraCapture({ mode, onCapture, state, onStateChange }: CameraC
               }
             `}
           >
-            <Camera className="w-6 h-6" />
+            <Camera className="w-5 h-5 sm:w-6 sm:h-6" />
             Capturar {mode === 'vehicle' ? 'Vehículo' : 'Conductor'}
           </button>
         )}

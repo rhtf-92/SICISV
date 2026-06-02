@@ -76,4 +76,6 @@ export const entryApi = {
     const qs = licensePlate ? `?licensePlate=${encodeURIComponent(licensePlate)}` : '';
     return api.get<UnsettledEntriesResponse>(`/entries/unsettled${qs}`);
   },
+
+  ocr: (image: string) => api.post<{ success: boolean; data?: { licensePlate: string; confidence: number } }>('/entries/ocr', { image }),
 };
