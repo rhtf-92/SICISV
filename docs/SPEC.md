@@ -279,7 +279,7 @@ FRONTEND
 ├── PWA: Service Worker para offline
 └── Testing: Vitest + React Testing Library
 
-BACKEND
+BACKEND (API Gateway)
 ├── Runtime: Node.js 20 LTS
 ├── Framework: Express.js
 ├── Lenguaje: TypeScript
@@ -287,9 +287,17 @@ BACKEND
 ├── ORM: Prisma
 └── Autenticación: JWT (simple, para vigilantes)
 
+
+MICROSERVICIO FACIAL (IA)
+├── Runtime: Python 3.10+
+├── Framework: FastAPI
+├── Motor Biométrico: InsightFace
+└── Algoritmo: Redes Neuronales Convolucionales (Extracción de Embeddings)
+
 BASE DE DATOS
 ├── PostgreSQL (recomendado) o SQLite (para demo)
-├── Tablas: vehicles, entries, exits, incidents, users
+├── Tablas: vehicles, entries, exits, incidents, users, known_driver
+├── Extensiones: pgvector (búsqueda de similitud)
 └── Almacenamiento: Base64 (demo) / S3 (producción)
 
 INFRAESTRUCTURA (Opcional para producción)
@@ -317,8 +325,9 @@ CREATE TABLE users (
 CREATE TABLE entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     license_plate VARCHAR(20) NOT NULL,
-    vehicle_photo TEXT NOT NULL, -- Base64 o URL S3
-    driver_photo TEXT NOT NULL,  -- Base64 o URL S3
+    vehicle_photo TEXT NOT NULL,
+    driver_photo TEXT NOT NULL,
+    driver_embedding vector(512),
     entry_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     guard_id UUID REFERENCES users(id),
     latitude DECIMAL(10, 8),
@@ -326,6 +335,18 @@ CREATE TABLE entries (
     device_info TEXT, -- User agent, device ID
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- Tabla de Conductores Conocidos (Biometría)
+CREATE TABLE "KnownDriver" (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "fullName" VARCHAR(255),
+    "licensePlate" VARCHAR(20) NOT NULL,
+    "vehiclePhoto" TEXT NOT NULL,
+    "driverPhoto" TEXT NOT NULL,
+    embedding vector(512),
+    "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabla de Registros de Salida
@@ -390,6 +411,11 @@ INCIDENTS (Incidentes)
 GET    /api/incidents           - Listar incidentes
 POST   /api/incidents           - Reportar incidente
 PATCH  /api/incidents/:id       - Actualizar estado de incidente
+
+
+FACIAL RECOGNITION (Microservicio Proxy)
+POST   /api/facial/recognize    - Analiza rostro y devuelve embedding
+POST   /api/facial/register-profile - Registra un nuevo perfil biométrico
 
 DASHBOARD
 GET    /api/dashboard/stats     - Estadísticas generales

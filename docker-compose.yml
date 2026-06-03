@@ -28,12 +28,11 @@ services:
     ports:
       - "3002:3002"
     environment:
-      DATABASE_URL: postgresql+psycopg2://sicisv:sicisv_dev@postgres:5432/sicisv
+      DATABASE_URL: postgresql+psycopg2://sicisv:sicisv_dev@host.docker.internal:5433/sicisv
       HOST: "0.0.0.0"
       PORT: "3002"
-    depends_on:
-      postgres:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   postgres_data:

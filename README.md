@@ -1,18 +1,20 @@
 # Sistema de Control de Ingresos y Salidas de Vehículos (SICISV)
 
-Sistema full-stack para control vehicular empresarial que requiere captura simultánea de evidencia fotográfica (vehículo lateral + rostro del conductor) y registro de placa, siguiendo un flujo estrictamente secuencial.
+Sistema full-stack para control vehicular empresarial que requiere captura simultánea de evidencia fotográfica (vehículo lateral + rostro del conductor) y registro de placa, siguiendo un flujo estrictamente secuencial. Incorpora un avanzado sistema de reconocimiento facial impulsado por IA para la validación biométrica automática de conductores.
 
 ## Características Principales
 
 - **Flujo Secuencial Estricto**: 
   1. Captura foto lateral del vehículo
-  2. Captura foto del conductor (con detección facial)
+  2. Captura foto del conductor (con extracción y validación biométrica facial)
   3. Registro de placa (validación de formato)
-  4. Confirmación de ingreso/salida
+  4. Confirmación de ingreso/salida con Facial Match Automático
 
 - **Tecnologías Modernizadas (Actualizado a Mayo 2026)**:
   - **Frontend**: React 19 (última versión estable) + TypeScript 5.7 + Vite 6 + Tailwind CSS 3.4 + Zustand 5
-  - **Backend**: Node.js 20+ + Express 5 (último estándar de enrutamiento) + TypeScript 5.7 + Prisma 7 (última versión estable con Driver Adapter nativo `@prisma/adapter-pg`) + PostgreSQL 16
+  - **Backend API**: Node.js 20+ + Express 5 + TypeScript 5.7 + Prisma 7
+  - **Microservicio de IA**: Python 3.10+ + FastAPI + InsightFace + OpenCV
+  - **Base de Datos**: PostgreSQL 18 con extensión `pgvector`
   - **Almacenamiento**: Base64 (demo) / AWS S3 (producción)
   - **Autenticación**: JWT
   - **Offline-First**: PWA con Service Worker y IndexedDB
@@ -40,6 +42,13 @@ El sistema está **100% implementado y es completamente funcional (Full-Stack)**
 ## 🛠️ Requisitos del Sistema e Instalación de Prerrequisitos
 
 Para poder compilar y ejecutar el proyecto localmente, su máquina debe contar con los siguientes componentes de entorno instalados y configurados:
+
+
+### 3. Docker y Docker Compose (Recomendado)
+* **Descripción**: Indispensable para levantar de manera ágil el contenedor del microservicio de reconocimiento facial (`facial-service`), automatizando la instalación de dependencias complejas (OpenCV, InsightFace).
+* **Instalación**: Siga la documentación oficial de Docker para su entorno.
+
+---
 
 ### 1. Node.js (v20 LTS o superior) & npm (v10 o superior)
 * **Descripción**: Entorno de tiempo de ejecución de JavaScript para servidores y gestor de paquetes oficial, indispensable para soportar y gestionar la estructura modular monorepo de *npm workspaces* utilizada en este proyecto.
@@ -132,17 +141,24 @@ npm run db:migrate
 npm run db:seed
 ```
 
-### 💻 4. Ejecución del Entorno de Desarrollo (Frontend + Backend)
+### 💻 4. Ejecución del Entorno de Desarrollo (IA + Backend + Frontend)
 
-#### Opción A: Arranque Unificado Concurrente (Recomendado)
-Inicie ambos servidores de forma automática con un único comando en consola:
+#### Opción A: Arranque Global con Docker (Recomendado)
+Puede levantar la base de datos y el microservicio facial usando Docker Compose:
+```bash
+npm run docker:up
+```
+
+#### Opción B: Arranque Concurrente Local
+Inicie el backend en Node y el frontend en Vite:
 ```bash
 npm run dev
 ```
-* **Vite Frontend**: [http://localhost:5173/](http://localhost:5173/) (Los accesos a `/api` son redirigidos automáticamente al backend por el proxy).
-* **Express Backend**: [http://localhost:3001/](http://localhost:3001/) (Health Check en `http://localhost:3001/health`).
+* **Vite Frontend**: [http://localhost:5173/](http://localhost:5173/)
+* **Express Backend**: [http://localhost:3001/](http://localhost:3001/)
+* **Facial API**: [http://localhost:3002/](http://localhost:3002/)
 
-#### Opción B: Arranque Individual por Terminal
+#### Opción C: Arranque Individual por Terminal
 Si desea monitorear logs específicos de manera aislada:
 ```bash
 # Iniciar únicamente el Backend
