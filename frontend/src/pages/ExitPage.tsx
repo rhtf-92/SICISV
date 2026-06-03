@@ -1,7 +1,5 @@
-// Página de Registro de Salida - Sistema de Control de Vehículos
-
-import { useState, useCallback } from 'react';
-import { Search, Car, Clock, AlertTriangle, CheckCircle, X, Camera } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Search, Car, Clock, AlertTriangle, CheckCircle, X, Camera, Scan } from 'lucide-react';
 import { useVehicleStore } from '../store';
 import { PlateInput } from '../components/PlateInput';
 import { CameraCapture } from '../components/CameraCapture';
@@ -11,7 +9,7 @@ import { exitApi } from '../services/exitApi';
 import { incidentApi } from '../services/incidentApi';
 import type { Entry, CameraState } from '../types';
 
-type ExitVerificationState = 'idle' | 'searching' | 'found' | 'driver_mismatch' | 'not_found' | 'confirming' | 'success';
+type ExitVerificationState = 'idle' | 'searching' | 'found' | 'analyzing' | 'driver_mismatch' | 'not_found' | 'success';
 
 interface ExitPageProps {
   onComplete?: () => void;
@@ -25,13 +23,14 @@ export function ExitPage({ onComplete }: ExitPageProps) {
   const [foundEntry, setFoundEntry] = useState<Entry | null>(null);
   const [currentDriverPhoto, setCurrentDriverPhoto] = useState<string | null>(null);
   const [driverMatch, setDriverMatch] = useState<boolean | null>(null);
+  const [matchConfidence, setMatchConfidence] = useState<number | null>(null);
   const [cameraState, setCameraState] = useState<CameraState>({ status: 'idle' });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingEntries, setPendingEntries] = useState<Entry[]>([]);
   const [pendingLoaded, setPendingLoaded] = useState(false);
+  const autoExitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load pending entries on first render
   const loadPending = useCallback(async () => {
     if (pendingLoaded) return;
     try {
@@ -49,10 +48,8 @@ export function ExitPage({ onComplete }: ExitPageProps) {
     }
   }, [pendingLoaded]);
 
-  // Load on mount
   useState(() => { loadPending(); });
 
-  // Buscar vehículo por placa usando API real
   const searchVehicle = useCallback(async () => {
     if (!searchPlate || searchPlate.length < 5) {
       setError('Ingrese una placa válida');
@@ -73,6 +70,7 @@ export function ExitPage({ onComplete }: ExitPageProps) {
           guardName: entry.guard?.fullName || '',
           hasExit: false,
         });
+        setCameraState({ status: 'idle' });
         setVerificationState('found');
       } else {
         setVerificationState('not_found');
@@ -86,47 +84,51 @@ export function ExitPage({ onComplete }: ExitPageProps) {
     }
   }, [searchPlate]);
 
-  // Capturar foto del conductor actual
   const handleDriverCapture = useCallback((photo: string) => {
     setCurrentDriverPhoto(photo || null);
   }, []);
 
-  // Confirmar salida con API real
-  const handleConfirmExit = useCallback(async (isMatch: boolean) => {
-    if (!foundEntry) return;
+  const processExit = useCallback(async (photo: string) => {
+    if (!foundEntry || !photo) return;
 
-    setIsLoading(true);
-    setDriverMatch(isMatch);
+    setVerificationState('analyzing');
+    setCurrentDriverPhoto(photo);
 
     try {
-      await exitApi.create({
+      const response = await exitApi.create({
         licensePlate: foundEntry.licensePlate,
-        driverPhotoExit: currentDriverPhoto || undefined,
-        isDriverMatch: isMatch,
+        driverPhotoExit: photo,
       });
+
+      const rawMatch = response?.data?.driverMatch;
+      setDriverMatch(rawMatch);
 
       setExitSearchResult({
         found: true,
         entry: { ...foundEntry, hasExit: true },
-        currentDriverPhoto: currentDriverPhoto || undefined,
-        driverMatch: isMatch,
+        currentDriverPhoto: photo,
+        driverMatch: rawMatch ?? false,
       });
 
       setVerificationState('success');
 
-      // Reset después de 3 segundos
-      setTimeout(() => {
+      autoExitRef.current = setTimeout(() => {
         resetForm();
         if (onComplete) onComplete();
-      }, 3000);
+      }, 4000);
     } catch (err: any) {
-      setError(err.message || 'Error registrando la salida');
-    } finally {
-      setIsLoading(false);
+      setDriverMatch(false);
+      setVerificationState('driver_mismatch');
+      setError(err.message || 'Error en reconocimiento facial');
     }
-  }, [foundEntry, currentDriverPhoto, setExitSearchResult]);
+  }, [foundEntry, setExitSearchResult]);
 
-  // Reportar incidente con API real
+  useEffect(() => {
+    return () => {
+      if (autoExitRef.current) clearTimeout(autoExitRef.current);
+    };
+  }, []);
+
   const handleReportIncident = useCallback(async () => {
     if (!foundEntry) return;
 
@@ -142,13 +144,45 @@ export function ExitPage({ onComplete }: ExitPageProps) {
     }
   }, [foundEntry]);
 
-  // Resetear formulario
+  const overrideExit = useCallback(async () => {
+    if (!foundEntry || !currentDriverPhoto) return;
+    setIsLoading(true);
+
+    try {
+      await exitApi.create({
+        licensePlate: foundEntry.licensePlate,
+        driverPhotoExit: currentDriverPhoto,
+        isDriverMatch: false,
+      });
+
+      setExitSearchResult({
+        found: true,
+        entry: { ...foundEntry, hasExit: true },
+        currentDriverPhoto: currentDriverPhoto,
+        driverMatch: false,
+      });
+
+      setDriverMatch(false);
+      setVerificationState('success');
+
+      autoExitRef.current = setTimeout(() => {
+        resetForm();
+        if (onComplete) onComplete();
+      }, 4000);
+    } catch (err: any) {
+      setError(err.message || 'Error registrando la salida');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [foundEntry, currentDriverPhoto, setExitSearchResult]);
+
   const resetForm = useCallback(() => {
     setSearchPlate('');
     setVerificationState('idle');
     setFoundEntry(null);
     setCurrentDriverPhoto(null);
     setDriverMatch(null);
+    setMatchConfidence(null);
     setError(null);
     setCameraState({ status: 'idle' });
     setPendingLoaded(false);
@@ -157,18 +191,16 @@ export function ExitPage({ onComplete }: ExitPageProps) {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
-      {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-          <Car className="w-8 h-8 text-amber-400" />
+          <Scan className="w-8 h-8 text-cyan-400" />
           Registro de Salida
         </h1>
         <p className="text-slate-400 mt-1">
-          Verifique y registre la salida de vehículos
+          Reconocimiento facial automático para verificación de conductor
         </p>
       </div>
 
-      {/* Vehículos pendientes */}
       {pendingEntries.length > 0 && verificationState === 'idle' && (
         <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
           <div className="flex items-center gap-2 text-amber-400 mb-3">
@@ -179,9 +211,7 @@ export function ExitPage({ onComplete }: ExitPageProps) {
             {pendingEntries.slice(0, 8).map(entry => (
               <button
                 key={entry.id}
-                onClick={() => {
-                  setSearchPlate(entry.licensePlate);
-                }}
+                onClick={() => setSearchPlate(entry.licensePlate)}
                 className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg font-mono text-sm transition-colors"
               >
                 {entry.licensePlate}
@@ -191,7 +221,6 @@ export function ExitPage({ onComplete }: ExitPageProps) {
         </div>
       )}
 
-      {/* Estado: Idle - Búsqueda */}
       {verificationState === 'idle' && (
         <div className="bg-slate-800 rounded-xl p-6 animate-fade-in">
           <div className="text-center mb-6">
@@ -200,7 +229,7 @@ export function ExitPage({ onComplete }: ExitPageProps) {
             </div>
             <h2 className="text-xl font-bold text-white mb-2">Buscar Vehículo</h2>
             <p className="text-slate-400">
-              Ingrese la placa del vehículo para verificar su registro de ingreso
+              Ingrese la placa del vehículo para iniciar la verificación automática
             </p>
           </div>
 
@@ -232,22 +261,15 @@ export function ExitPage({ onComplete }: ExitPageProps) {
               `}
             >
               {isLoading ? (
-                <>
-                  <span className="animate-spin">⏳</span>
-                  Buscando...
-                </>
+                <><span className="animate-spin">⏳</span> Buscando...</>
               ) : (
-                <>
-                  <Search className="w-5 h-5" />
-                  Buscar Vehículo
-                </>
+                <><Search className="w-5 h-5" /> Buscar Vehículo</>
               )}
             </button>
           </div>
         </div>
       )}
 
-      {/* Estado: Buscando */}
       {verificationState === 'searching' && (
         <div className="bg-slate-800 rounded-xl p-12 text-center animate-fade-in">
           <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
@@ -255,7 +277,6 @@ export function ExitPage({ onComplete }: ExitPageProps) {
         </div>
       )}
 
-      {/* Estado: No encontrado */}
       {verificationState === 'not_found' && (
         <div className="bg-slate-800 rounded-xl p-8 animate-fade-in">
           <div className="text-center mb-6">
@@ -267,25 +288,19 @@ export function ExitPage({ onComplete }: ExitPageProps) {
               No existe un registro de ingreso activo para la placa {searchPlate}
             </p>
           </div>
-
           <div className="flex gap-4 max-w-md mx-auto">
-            <button
-              onClick={resetForm}
-              className="flex-1 py-3 rounded-xl border-2 border-slate-600 text-slate-300 font-medium hover:bg-slate-700 transition-colors"
-            >
+            <button onClick={resetForm} className="flex-1 py-3 rounded-xl border-2 border-slate-600 text-slate-300 font-medium hover:bg-slate-700 transition-colors">
               Nueva Búsqueda
             </button>
           </div>
         </div>
       )}
 
-      {/* Estado: Encontrado - Verificación de conductor */}
-      {(verificationState === 'found' || verificationState === 'confirming') && foundEntry && (
+      {verificationState === 'found' && foundEntry && (
         <div className="space-y-6 animate-fade-in">
-          {/* Info del vehículo */}
           <div className="bg-slate-800 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white">Datos del Registro</h2>
+              <h2 className="text-xl font-bold text-white">Vehículo Encontrado</h2>
               <VehicleStatusBadge hasExit={false} />
             </div>
 
@@ -312,171 +327,130 @@ export function ExitPage({ onComplete }: ExitPageProps) {
               </div>
             </div>
 
-            {/* Fotos comparativas */}
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <div>
-                <p className="text-sm text-slate-400 mb-2">Foto del Conductor (Ingreso)</p>
-                <div className="aspect-square bg-slate-700 rounded-xl overflow-hidden">
-                  <img
-                    src={foundEntry.driverPhoto}
-                    alt="Conductor registrado"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+            <div className="mt-4 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
+              <div className="flex items-center gap-2 text-cyan-400">
+                <Scan className="w-5 h-5" />
+                <span className="font-medium">Reconocimiento facial automático</span>
               </div>
-              {currentDriverPhoto ? (
-                <div>
-                  <p className="text-sm text-slate-400 mb-2">Foto del Conductor (Actual)</p>
-                  <div className="aspect-square bg-slate-700 rounded-xl overflow-hidden">
-                    <img
-                      src={currentDriverPhoto}
-                      alt="Conductor actual"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-sm text-slate-400 mb-2">Foto del Conductor (Actual)</p>
-                  <div className="aspect-square bg-slate-700 rounded-xl flex items-center justify-center text-slate-500">
-                    <Camera className="w-8 h-8" />
-                  </div>
-                </div>
-              )}
+              <p className="text-cyan-300/70 text-sm mt-1">
+                La cámara se activará automáticamente. El conductor debe mirar directamente a la cámara.
+              </p>
             </div>
           </div>
 
-          {/* Captura de conductor para verificar */}
-          {!currentDriverPhoto && (
-            <div className="bg-slate-800 rounded-xl p-6">
-              <h3 className="text-lg font-bold text-white mb-4 text-center">
-                Verificación de Conductor
-              </h3>
-              <CameraCapture
-                mode="driver"
-                onCapture={handleDriverCapture}
-                state={cameraState}
-                onStateChange={setCameraState}
-              />
-            </div>
-          )}
-
-          {/* Botones de acción - el vigilante decide si coincide */}
-          {currentDriverPhoto && (
-            <div className="bg-slate-800 rounded-xl p-6">
-              <h3 className="text-lg font-bold text-white mb-4 text-center">
-                ¿El conductor coincide con el registrado?
-              </h3>
-              <div className="flex gap-4">
-                <button
-                  onClick={resetForm}
-                  className="py-4 px-6 rounded-xl border-2 border-slate-600 text-slate-300 font-semibold hover:bg-slate-700 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => {
-                    setDriverMatch(false);
-                    setVerificationState('driver_mismatch');
-                  }}
-                  className="flex-1 py-4 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
-                >
-                  <AlertTriangle className="w-5 h-5" />
-                  No Coincide
-                </button>
-                <button
-                  onClick={() => handleConfirmExit(true)}
-                  disabled={isLoading}
-                  className="flex-1 py-4 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <span className="animate-spin">⏳</span>
-                      Procesando...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-5 h-5" />
-                      Sí, Confirmar Salida
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
+          <div className="bg-slate-800 rounded-xl p-6">
+            <CameraCapture
+              mode="driver"
+              onCapture={(photo) => {
+                handleDriverCapture(photo);
+                processExit(photo);
+              }}
+              state={cameraState}
+              onStateChange={setCameraState}
+              autoCapture
+            />
+          </div>
         </div>
       )}
 
-      {/* Estado: Driver mismatch */}
+      {verificationState === 'analyzing' && (
+        <div className="bg-slate-800 rounded-xl p-12 text-center animate-fade-in">
+          <div className="w-20 h-20 rounded-full bg-cyan-500/20 flex items-center justify-center mx-auto mb-6">
+            <Scan className="w-10 h-10 text-cyan-400 animate-pulse" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-3">Analizando Rostro...</h2>
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="animate-spin w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full" />
+            <p className="text-cyan-400">Reconocimiento facial en progreso</p>
+          </div>
+          <div className="flex justify-center gap-6 mt-6">
+            <div className="text-center">
+              <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-700 mx-auto mb-2 ring-2 ring-cyan-500/50">
+                <img src={foundEntry?.driverPhoto} alt="Registrado" className="w-full h-full object-cover" />
+              </div>
+              <p className="text-xs text-slate-400">Registrado</p>
+            </div>
+            {currentDriverPhoto && (
+              <div className="text-center">
+                <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-700 mx-auto mb-2 ring-2 ring-cyan-500/50">
+                  <img src={currentDriverPhoto} alt="Actual" className="w-full h-full object-cover" />
+                </div>
+                <p className="text-xs text-slate-400">Actual</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {verificationState === 'driver_mismatch' && foundEntry && (
         <div className="bg-slate-800 rounded-xl p-8 animate-fade-in">
           <div className="text-center mb-6">
             <div className="w-20 h-20 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4 animate-pulse">
               <AlertTriangle className="w-10 h-10 text-red-400" />
             </div>
-            <h2 className="text-2xl font-bold text-red-400 mb-2">¡Alerta: Conductor Diferente!</h2>
+            <h2 className="text-2xl font-bold text-red-400 mb-2">¡Conductor No Verificado!</h2>
             <p className="text-slate-400">
-              El conductor actual no coincide con el registrado en el ingreso
+              El reconocimiento facial no pudo verificar al conductor
             </p>
           </div>
 
-          {/* Comparación visual */}
           <div className="grid grid-cols-2 gap-6 mb-6">
             <div className="text-center">
               <p className="text-sm text-slate-400 mb-2">Registrado</p>
-              <div className="aspect-square bg-slate-700 rounded-xl overflow-hidden">
-                <img
-                  src={foundEntry.driverPhoto}
-                  alt="Conductor registrado"
-                  className="w-full h-full object-cover"
-                />
+              <div className="aspect-square bg-slate-700 rounded-xl overflow-hidden ring-2 ring-slate-600">
+                <img src={foundEntry.driverPhoto} alt="Conductor registrado" className="w-full h-full object-cover" />
               </div>
             </div>
             <div className="text-center">
               <p className="text-sm text-slate-400 mb-2">Actual</p>
-              <div className="aspect-square bg-slate-700 rounded-xl overflow-hidden">
+              <div className="aspect-square bg-slate-700 rounded-xl overflow-hidden ring-2 ring-red-500/50">
                 {currentDriverPhoto && (
-                  <img
-                    src={currentDriverPhoto}
-                    alt="Conductor actual"
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={currentDriverPhoto} alt="Conductor actual" className="w-full h-full object-cover" />
                 )}
               </div>
             </div>
           </div>
 
           <div className="flex gap-4">
-            <button
-              onClick={resetForm}
-              className="flex-1 py-4 rounded-xl border-2 border-slate-600 text-slate-300 font-semibold hover:bg-slate-700 transition-colors"
-            >
+            <button onClick={resetForm} className="flex-1 py-4 rounded-xl border-2 border-slate-600 text-slate-300 font-semibold hover:bg-slate-700 transition-colors">
               Cancelar
             </button>
-            <button
-              onClick={handleReportIncident}
-              className="flex-1 py-4 rounded-xl bg-amber-600 text-white font-semibold hover:bg-amber-500 transition-colors"
-            >
+            <button onClick={handleReportIncident} className="flex-1 py-4 rounded-xl bg-amber-600 text-white font-semibold hover:bg-amber-500 transition-colors">
               Reportar Incidente
             </button>
-            <button
-              onClick={() => handleConfirmExit(false)}
-              disabled={isLoading}
-              className="flex-1 py-4 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-500 transition-colors disabled:opacity-50"
-            >
+            <button onClick={overrideExit} disabled={isLoading} className="flex-1 py-4 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-500 transition-colors disabled:opacity-50">
               {isLoading ? 'Procesando...' : 'Confirmar de Todos Modos'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Estado: Éxito */}
       {verificationState === 'success' && (
         <div className="bg-slate-800 rounded-xl p-12 text-center animate-fade-in">
-          <div className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6 animate-bounce">
-            <CheckCircle className="w-16 h-16 text-green-400" />
+          <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce ${
+            driverMatch === false ? 'bg-red-500/20' : 'bg-green-500/20'
+          }`}>
+            {driverMatch === false ? (
+              <AlertTriangle className="w-16 h-16 text-red-400" />
+            ) : (
+              <CheckCircle className="w-16 h-16 text-green-400" />
+            )}
           </div>
           <h2 className="text-3xl font-bold text-white mb-2">¡Salida Registrada!</h2>
+          <div className={`inline-block rounded-xl px-4 py-2 mb-4 text-sm font-semibold ${
+            driverMatch === null
+              ? 'bg-yellow-500/20 text-yellow-400'
+              : driverMatch
+                ? 'bg-green-500/20 text-green-400'
+                : 'bg-red-500/20 text-red-400'
+          }`}>
+            {driverMatch === null
+              ? 'Reconocimiento facial: No se pudo verificar el rostro'
+              : driverMatch
+                ? 'Reconocimiento facial: Conductor verificado exitosamente'
+                : 'Reconocimiento facial: Conductor diferente al registrado'
+            }
+          </div>
           <p className="text-slate-400 mb-6">
             El vehículo {foundEntry?.licensePlate} ha salido exitosamente
           </p>

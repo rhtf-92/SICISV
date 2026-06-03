@@ -19,5 +19,21 @@ services:
       timeout: 5s
       retries: 5
 
+  facial-service:
+    build:
+      context: ./backend/facial-service
+      dockerfile: Dockerfile
+    container_name: sicisv-facial
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://sicisv:sicisv_dev@postgres:5432/sicisv
+      HOST: "0.0.0.0"
+      PORT: "3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:

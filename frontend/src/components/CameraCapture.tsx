@@ -10,9 +10,10 @@ interface CameraCaptureProps {
   onCapture: (photo: string) => void;
   state: CameraState;
   onStateChange: (state: CameraState) => void;
+  autoCapture?: boolean;
 }
 
-export function CameraCapture({ mode, onCapture, state, onStateChange }: CameraCaptureProps) {
+export function CameraCapture({ mode, onCapture, state, onStateChange, autoCapture }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -130,10 +131,33 @@ export function CameraCapture({ mode, onCapture, state, onStateChange }: CameraC
     }
   }, [onCapture, onStateChange, startCamera]);
 
+  const [countdown, setCountdown] = useState<number | null>(null);
+
   useEffect(() => {
     startCamera();
     return () => stopCamera();
   }, [startCamera, stopCamera]);
+
+  useEffect(() => {
+    if (!autoCapture || state.status !== 'active') {
+      setCountdown(null);
+      return;
+    }
+
+    setCountdown(3);
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          handleCapture();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [autoCapture, state.status]);
 
   // Mostrar preview capturada si existe
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
@@ -270,6 +294,19 @@ export function CameraCapture({ mode, onCapture, state, onStateChange }: CameraC
           <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-500/80 text-white px-3 py-1 rounded-full text-sm font-medium">
             <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
             EN VIVO
+          </div>
+        )}
+
+        {/* Auto-capture countdown */}
+        {countdown !== null && state.status === 'active' && (
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-24 h-24 rounded-full border-4 border-white flex items-center justify-center mx-auto mb-3">
+                <span className="text-5xl font-bold text-white">{countdown}</span>
+              </div>
+              <p className="text-white text-lg font-semibold">Capturando rostro...</p>
+              <p className="text-white/70 text-sm mt-1">Mire directamente a la cámara</p>
+            </div>
           </div>
         )}
       </div>

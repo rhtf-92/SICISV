@@ -1,5 +1,8 @@
 import { prisma } from '../config/database';
 import { z } from 'zod';
+import { FacialClient } from './facialClient';
+
+const facialClient = new FacialClient();
 
 export const createEntrySchema = z.object({
   licensePlate: z.string().min(1).max(20),
@@ -38,6 +41,19 @@ export class EntryService {
           select: { id: true, username: true, fullName: true },
         },
       },
+    });
+
+    void facialClient.storeEmbedding(entry.id, input.driverPhoto).catch((err) => {
+      console.error(`Failed to store facial embedding for entry ${entry.id}:`, err);
+    });
+
+    void facialClient.registerProfile({
+      image: input.driverPhoto,
+      license_plate: input.licensePlate,
+      vehicle_photo: input.vehiclePhoto,
+      driver_photo: input.driverPhoto,
+    }).catch((err) => {
+      console.error(`Failed to register driver profile for entry ${entry.id}:`, err);
     });
 
     return entry;

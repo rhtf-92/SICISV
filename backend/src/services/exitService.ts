@@ -1,5 +1,8 @@
 import { prisma } from '../config/database';
 import { z } from 'zod';
+import { FacialClient } from './facialClient';
+
+const facialClient = new FacialClient();
 
 export const createExitSchema = z.object({
   licensePlate: z.string().min(1).max(20),
@@ -24,7 +27,6 @@ interface ExitFilters {
 
 export class ExitService {
   async createExit(input: CreateExitInput, guardId: string) {
-    // Find the most recent unsettled entry for this license plate
     const entry = await prisma.entry.findFirst({
       where: {
         licensePlate: {
@@ -40,12 +42,25 @@ export class ExitService {
       throw new Error('No unsettled entry found for this license plate');
     }
 
+    let isDriverMatch: boolean | null = input.isDriverMatch ?? null;
+
+    if (input.driverPhotoExit && isDriverMatch === null) {
+      try {
+        const result = await facialClient.compareFace(entry.id, input.driverPhotoExit);
+        if (result.success) {
+          isDriverMatch = result.match ?? null;
+        }
+      } catch (err) {
+        console.error(`Failed to compare faces for entry ${entry.id}:`, err);
+      }
+    }
+
     const exit = await prisma.exit.create({
       data: {
         entryId: entry.id,
         guardId,
         driverPhotoExit: input.driverPhotoExit,
-        isDriverMatch: input.isDriverMatch,
+        isDriverMatch,
         latitude: input.latitude,
         longitude: input.longitude,
         notes: input.notes,

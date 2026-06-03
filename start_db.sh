@@ -35,6 +35,22 @@ echo "⏳ Esperando a que el servidor se inicialice..."
 for i in {1..10}; do
     if pg_isready -h localhost -p $PORT > /dev/null 2>&1; then
         echo "✅ Base de datos iniciada con éxito y lista para conexiones en puerto $PORT."
+
+        # Habilitar extensión pgvector para reconocimiento facial
+        echo "🔧 Habilitando extensión pgvector..."
+        psql -h localhost -p $PORT -U sicisv -d sicisv -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null || true
+
+        # Ejecutar migraciones pendientes de Prisma
+        cd "$SCRIPT_DIR/backend"
+        if [ -f "node_modules/.bin/prisma" ]; then
+            echo "🗃️ Ejecutando migraciones de Prisma..."
+            DATABASE_URL="postgresql://sicisv:sicisv_dev@localhost:$PORT/sicisv" \
+                npx prisma migrate deploy 2>/dev/null || true
+        else
+            echo "⚠️ Prisma no está instalado. Ejecute 'npm install' en backend/ y luego 'npm run prisma:migrate'"
+        fi
+        cd "$SCRIPT_DIR"
+
         exit 0
     fi
     sleep 1
